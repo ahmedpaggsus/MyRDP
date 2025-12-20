@@ -6,7 +6,7 @@ on:
 jobs:
   rdp-job:
     runs-on: windows-latest
-    timeout-minutes: 360 # 6 ساعات كاملة
+    timeout-minutes: 360 # 6 ساعات
 
     steps:
       - name: Checkout Code
@@ -27,7 +27,7 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
           Restart-Service -Name TermService -Force
 
-      # 3. إنشاء المستخدم (تم إرجاعه لاسم RDP)
+      # 3. إنشاء المستخدم (RDP)
       - name: Create RDP User
         shell: powershell
         run: |
@@ -47,7 +47,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent ffmpeg-python
 
-      # 5. ربط Tailscale
+      # 5. ربط Tailscale (باستخدام المفتاح الجديد من Secrets)
       - name: Tailscale Connect
         shell: powershell
         run: |
@@ -55,20 +55,23 @@ jobs:
           $out = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process msiexec.exe -ArgumentList "/i $out /quiet /norestart" -Wait
+          
+          # محاولة الاتصال - تأكد من إضافة المفتاح في GitHub Secrets باسم TAILSCALE_AUTH_KEY
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner --accept-routes
+          
           $tsIp = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TS_IP=$tsIp" >> $env:GITHUB_ENV
 
-      # 6. لوحة البيانات النهائية
+      # 6. لوحة البيانات النهائية (ستظهر في الـ Logs)
       - name: Connection Info
         shell: powershell
         run: |
-          Write-Host "`n==============================================="
-          Write-Host "✅ RDP SYSTEM READY"
+          Write-Host "`n===============================================" -ForegroundColor Green
+          Write-Host "🚀 RDP SYSTEM READY" -ForegroundColor Cyan
           Write-Host "==============================================="
-          Write-Host "IP Address (Tailscale): $env:TS_IP"
-          Write-Host "Username             : $env:RDP_USER"
-          Write-Host "Password             : $env:RDP_PASS"
+          Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
+          Write-Host "Username     : $env:RDP_USER"
+          Write-Host "Password     : $env:RDP_PASS" -ForegroundColor Red
           Write-Host "==============================================="
 
       # 7. الحفاظ على الاتصال
@@ -76,6 +79,6 @@ jobs:
         shell: powershell
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP Server is active..."
+            Write-Host "[$(Get-Date)] RDP Server is active and waiting for connection..."
             Start-Sleep -Seconds 300
           }
