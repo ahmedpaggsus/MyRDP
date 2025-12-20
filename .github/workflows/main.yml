@@ -1,21 +1,35 @@
 name: RDP
 
 on:
-  workflow_dispatch: # يُمكنك بدء هذا الـ Workflow يدوياً من صفحة GitHub Actions
+  workflow_dispatch: 
 
 jobs:
   rdp-job:
     runs-on: windows-latest
-    timeout-minutes: 360 # الحد الأقصى المسموح به
+    timeout-minutes: 360 # 6 ساعات كاملة
 
     steps:
-      - name: Enable RDP
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. إعداد Python 3.11 (لحل مشكلة الإصدار القديم)
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 2. تفعيل RDP وضبط النظام
+      - name: Configure RDP
+        shell: powershell
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
           Restart-Service -Name TermService -Force
 
+      # 3. إنشاء المستخدم (تم إرجاعه لاسم RDP)
       - name: Create RDP User
+        shell: powershell
         run: |
           $password = -join ((33..126) | Get-Random -Count 16 | % {[char]$_})
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
@@ -25,31 +39,43 @@ jobs:
           echo "RDP_USER=RDP" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      - name: Install Tailscale
+      # 4. تثبيت الأدوات (FFmpeg, yt-dlp, والمكتبات)
+      - name: Install Tools
+        shell: powershell
+        run: |
+          choco install ffmpeg yt-dlp -y
+          python -m pip install --upgrade pip
+          pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent ffmpeg-python
+
+      # 5. ربط Tailscale
+      - name: Tailscale Connect
+        shell: powershell
         run: |
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $out = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process msiexec.exe -ArgumentList "/i $out /quiet /norestart" -Wait
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner --accept-routes
+          $tsIp = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          echo "TS_IP=$tsIp" >> $env:GITHUB_ENV
 
-      - name: Connect Tailscale
+      # 6. لوحة البيانات النهائية
+      - name: Connection Info
+        shell: powershell
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-${{ github.run_id }}
-          $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-          echo "TS_IP=$ip" >> $env:GITHUB_ENV
-
-      - name: Show Connection Info
-        run: |
-          Write-Host "`n============================"
-          Write-Host "✅ RDP Connected Successfully"
+          Write-Host "`n==============================================="
+          Write-Host "✅ RDP SYSTEM READY"
+          Write-Host "==============================================="
           Write-Host "IP Address (Tailscale): $env:TS_IP"
-          Write-Host "Username: $env:RDP_USER"
-          Write-Host "Password: $env:RDP_PASS"
-          Write-Host "============================`n"
+          Write-Host "Username             : $env:RDP_USER"
+          Write-Host "Password             : $env:RDP_PASS"
+          Write-Host "==============================================="
 
+      # 7. الحفاظ على الاتصال
       - name: Keep Alive
+        shell: powershell
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP Running..."
+            Write-Host "[$(Get-Date)] RDP Server is active..."
             Start-Sleep -Seconds 300
           }
