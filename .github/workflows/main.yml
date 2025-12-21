@@ -6,7 +6,7 @@ on:
 jobs:
   rdp-job:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 360 # 6 ساعات
 
     steps:
       - name: Checkout Code
@@ -18,28 +18,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 2. هندسة النظام: دعم العربية + ربط ملفات Python (الإصلاح النهائي)
-      - name: Quick System Configuration
-        shell: powershell
-        run: |
-          # تفعيل دعم اللغة العربية للكيبورد والنصوص (بدون تحميل حزم ثقيلة)
-          $LangList = New-WinUserLanguageList -Language "en-US"
-          $LangList.Add("ar-SA")
-          Set-WinUserLanguageList -LanguageList $LangList -Force
-          
-          # استدعاء CMD لتنفيذ أوامر ارتباط الملفات (حل مشكلة الخطأ)
-          $pythonPath = (Get-Command python).Source
-          cmd /c "assoc .py=Python.File"
-          cmd /c "ftype Python.File=`"$pythonPath`" `"%1`" %*"
-          
-          # إضافة امتداد .PY للامتدادات القابلة للتنفيذ
-          [Environment]::SetEnvironmentVariable("PATHEXT", [Environment]::GetEnvironmentVariable("PATHEXT", "Machine") + ";.PY", "Machine")
-          
-          # تحسين أداء الشبكة
-          netsh int tcp set global autotuninglevel=normal
-          Write-Host "Symphony Mode: Python associated & Arabic enabled successfully!" -ForegroundColor Green
-
-      # 3. تفعيل RDP وضبط النظام
+      # 2. تفعيل RDP وضبط النظام
       - name: Configure RDP
         shell: powershell
         run: |
@@ -47,6 +26,21 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
           Restart-Service -Name TermService -Force
+
+      # 3. جعل ملفات Python قابلة للتنفيذ كبرامج (طلبك الأساسي)
+      - name: Make Python Files Executable
+        shell: powershell
+        run: |
+          # ربط صيغة .py ببرنامج بايثون
+          assoc .py=Python.File
+          ftype Python.File="C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe" "%1" %*
+          
+          # إضافة .PY إلى قائمة الملحقات التي يراها الويندوز كأوامر مباشرة
+          $oldPathExt = [Environment]::GetEnvironmentVariable("PATHEXT", "Machine")
+          if ($oldPathExt -notlike "*;.PY*") {
+              [Environment]::SetEnvironmentVariable("PATHEXT", $oldPathExt + ";.PY", "Machine")
+          }
+          Write-Host "Python files are now recognized as system commands!" -ForegroundColor Green
 
       # 4. إنشاء المستخدم (RDP)
       - name: Create RDP User
@@ -60,24 +54,13 @@ jobs:
           echo "RDP_USER=RDP" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      # 5. تثبيت الأدوات مع التمويه الذكي (User-Agent Stealth)
-      - name: Install Tools & Stealth Setup
+      # 5. تثبيت الأدوات الاحترافية
+      - name: Install Tools
         shell: powershell
         run: |
-          choco install ffmpeg yt-dlp googlechrome aria2 -y
+          choco install ffmpeg yt-dlp vlc -y
           python -m pip install --upgrade pip
-          pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent requests
-          
-          # إعداد التمويه لخداع يوتيوب
-          $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-          $configPath = "$env:USERPROFILE\yt-dlp.conf"
-          @(" --user-agent `"$ua`"",
-            " --referer `"https://www.google.com/`"",
-            " --add-header `"Accept-Language: en-US,en;q=0.9,ar-SA;q=0.8`"",
-            " --geo-bypass",
-            " --external-downloader aria2c",
-            " --external-downloader-args `"aria2c:-x 16 -s 16 -k 1M`""
-          ) | Out-File -FilePath $configPath -Encoding utf8
+          pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent ffmpeg-python
 
       # 6. ربط Tailscale
       - name: Tailscale Connect
@@ -87,7 +70,10 @@ jobs:
           $out = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process msiexec.exe -ArgumentList "/i $out /quiet /norestart" -Wait
+          
+          # تأكد من وجود السر TAILSCALE_AUTH_KEY في إعدادات ريبو جيت هب
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner --accept-routes
+          
           $tsIp = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TS_IP=$tsIp" >> $env:GITHUB_ENV
 
@@ -96,11 +82,13 @@ jobs:
         shell: powershell
         run: |
           Write-Host "`n===============================================" -ForegroundColor Green
-          Write-Host "🚀 RDP SYSTEM READY (Optimized & Fixed)" -ForegroundColor Cyan
+          Write-Host "🚀 RDP SYSTEM READY - EXTREME EDITION" -ForegroundColor Cyan
           Write-Host "==============================================="
           Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
           Write-Host "Username     : $env:RDP_USER"
           Write-Host "Password     : $env:RDP_PASS" -ForegroundColor Red
+          Write-Host "-----------------------------------------------"
+          Write-Host "Python Integration: ENABLED (.py files run directly)"
           Write-Host "==============================================="
 
       # 8. الحفاظ على الاتصال
@@ -108,7 +96,6 @@ jobs:
         shell: powershell
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP Server is active..."
-            [System.GC]::Collect()
+            Write-Host "[$(Get-Date)] RDP Server is active. Tip: Use VLC for low-data streaming!"
             Start-Sleep -Seconds 300
           }
