@@ -18,28 +18,26 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 2. هندسة النظام: دعم العربية "السريع" + ربط ملفات Python
+      # 2. هندسة النظام: دعم العربية + ربط ملفات Python (الإصلاح النهائي)
       - name: Quick System Configuration
         shell: powershell
         run: |
-          # تفعيل دعم الحروف العربية والخطوط برمجياً (سريع جداً)
-          Set-WinSystemLocale ar-SA
-          Set-WinUserLanguageList -LanguageList en-US, ar-SA -Force
+          # تفعيل دعم اللغة العربية للكيبورد والنصوص (بدون تحميل حزم ثقيلة)
+          $LangList = New-WinUserLanguageList -Language "en-US"
+          $LangList.Add("ar-SA")
+          Set-WinUserLanguageList -LanguageList $LangList -Force
           
-          # جعل ملفات Python قابلة للتنفيذ
+          # استدعاء CMD لتنفيذ أوامر ارتباط الملفات (حل مشكلة الخطأ)
           $pythonPath = (Get-Command python).Source
-          assoc .py=Python.File
-          ftype Python.File="`"$pythonPath`" `"%1`" %*"
+          cmd /c "assoc .py=Python.File"
+          cmd /c "ftype Python.File=`"$pythonPath`" `"%1`" %*"
           
-          # إضافة الامتداد للنظام بشكل آمن
-          $currentPathExt = [Environment]::GetEnvironmentVariable("PATHEXT", "Machine")
-          if ($currentPathExt -notlike "*;.PY*") {
-              [Environment]::SetEnvironmentVariable("PATHEXT", "$currentPathExt;.PY", "Machine")
-          }
+          # إضافة امتداد .PY للامتدادات القابلة للتنفيذ
+          [Environment]::SetEnvironmentVariable("PATHEXT", [Environment]::GetEnvironmentVariable("PATHEXT", "Machine") + ";.PY", "Machine")
           
           # تحسين أداء الشبكة
           netsh int tcp set global autotuninglevel=normal
-          Write-Host "Quick Arabic support & Python association enabled." -ForegroundColor Green
+          Write-Host "Symphony Mode: Python associated & Arabic enabled successfully!" -ForegroundColor Green
 
       # 3. تفعيل RDP وضبط النظام
       - name: Configure RDP
@@ -70,7 +68,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent requests
           
-          # إعداد التمويه (Stealth)
+          # إعداد التمويه لخداع يوتيوب
           $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
           $configPath = "$env:USERPROFILE\yt-dlp.conf"
           @(" --user-agent `"$ua`"",
@@ -98,7 +96,7 @@ jobs:
         shell: powershell
         run: |
           Write-Host "`n===============================================" -ForegroundColor Green
-          Write-Host "🚀 RDP SYSTEM READY (Fast Boot Mode)" -ForegroundColor Cyan
+          Write-Host "🚀 RDP SYSTEM READY (Optimized & Fixed)" -ForegroundColor Cyan
           Write-Host "==============================================="
           Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
           Write-Host "Username     : $env:RDP_USER"
