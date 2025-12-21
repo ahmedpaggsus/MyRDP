@@ -6,19 +6,17 @@ on:
 jobs:
   rdp-job:
     runs-on: windows-latest
-    timeout-minutes: 360 # 6 ساعات
+    timeout-minutes: 360
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. إعداد Python 3.11
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 2. تفعيل RDP وضبط النظام
       - name: Configure RDP
         shell: powershell
         run: |
@@ -27,22 +25,15 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
           Restart-Service -Name TermService -Force
 
-      # 3. جعل ملفات Python قابلة للتنفيذ كبرامج (طلبك الأساسي)
+      # تشغيل ملفات Python كبرامج (إصلاح الـ Shell إلى CMD)
       - name: Make Python Files Executable
-        shell: powershell
+        shell: cmd
         run: |
-          # ربط صيغة .py ببرنامج بايثون
           assoc .py=Python.File
-          ftype Python.File="C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe" "%1" %*
-          
-          # إضافة .PY إلى قائمة الملحقات التي يراها الويندوز كأوامر مباشرة
-          $oldPathExt = [Environment]::GetEnvironmentVariable("PATHEXT", "Machine")
-          if ($oldPathExt -notlike "*;.PY*") {
-              [Environment]::SetEnvironmentVariable("PATHEXT", $oldPathExt + ";.PY", "Machine")
-          }
-          Write-Host "Python files are now recognized as system commands!" -ForegroundColor Green
+          ftype Python.File="C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe" "%%1" %%*
+          setx PATHEXT "%PATHEXT%;.PY" /M
+          echo Python integration done.
 
-      # 4. إنشاء المستخدم (RDP)
       - name: Create RDP User
         shell: powershell
         run: |
@@ -54,7 +45,6 @@ jobs:
           echo "RDP_USER=RDP" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      # 5. تثبيت الأدوات الاحترافية
       - name: Install Tools
         shell: powershell
         run: |
@@ -62,7 +52,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent ffmpeg-python
 
-      # 6. ربط Tailscale
       - name: Tailscale Connect
         shell: powershell
         run: |
@@ -70,32 +59,25 @@ jobs:
           $out = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process msiexec.exe -ArgumentList "/i $out /quiet /norestart" -Wait
-          
-          # تأكد من وجود السر TAILSCALE_AUTH_KEY في إعدادات ريبو جيت هب
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner --accept-routes
-          
           $tsIp = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TS_IP=$tsIp" >> $env:GITHUB_ENV
 
-      # 7. لوحة البيانات النهائية
       - name: Connection Info
         shell: powershell
         run: |
           Write-Host "`n===============================================" -ForegroundColor Green
-          Write-Host "🚀 RDP SYSTEM READY - EXTREME EDITION" -ForegroundColor Cyan
+          Write-Host "🚀 RDP SYSTEM READY" -ForegroundColor Cyan
           Write-Host "==============================================="
           Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
           Write-Host "Username     : $env:RDP_USER"
           Write-Host "Password     : $env:RDP_PASS" -ForegroundColor Red
-          Write-Host "-----------------------------------------------"
-          Write-Host "Python Integration: ENABLED (.py files run directly)"
           Write-Host "==============================================="
 
-      # 8. الحفاظ على الاتصال
       - name: Keep Alive
         shell: powershell
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP Server is active. Tip: Use VLC for low-data streaming!"
+            Write-Host "[$(Get-Date)] RDP Server is active..."
             Start-Sleep -Seconds 300
           }
