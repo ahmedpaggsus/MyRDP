@@ -1,4 +1,4 @@
-name: RDP-Cyber-Engineer-Deep-Stealth
+name: RDP
 
 on:
   workflow_dispatch: 
@@ -6,109 +6,110 @@ on:
 jobs:
   rdp-job:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 360 # 6 ساعات
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. تلاعب بالنظام لمحاكاة جهاز حقيقي (Hardware Masking)
-      - name: System Identity Masking
-        shell: powershell
-        run: |
-          # تغيير اسم الكمبيوتر لاسم عشوائي يشبه الأجهزة الشخصية
-          $randomName = "PC-" + (Get-Random -Minimum 1000 -Maximum 9999)
-          Rename-Computer -NewName $randomName -ErrorAction SilentlyContinue
-          
-          # تعديل الـ Registry لإيهام المواقع أن الجهاز ليس Virtual Machine
-          $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
-          Set-ItemProperty -Path $registryPath -Name "ProductId" -Value "00330-80000-00000-AA948"
-          
-          # ضبط الـ DNS لتجاوز مراقبة السيرفرات
-          Set-DnsClientServerAddress -InterfaceAlias (Get-NetAdapter).Name -ServerAddresses ("1.1.1.1", "8.8.8.8")
+      # 1. إعداد Python 3.11
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      # 2. تثبيت الترسانة البرمجية المتقدمة
-      - name: Install Advanced Engineering Arsenal
+      # 2. هندسة النظام: دعم العربية + ربط ملفات Python لتعمل مباشرة
+      - name: System Configuration
         shell: powershell
         run: |
-          # تثبيت الأدوات مع تفعيل خيارات التخفي
-          choco install ffmpeg yt-dlp googlechrome brave internet-download-manager vscode git 7zip aria2 -y
+          # تثبيت دعم اللغة العربية كاملاً مع بقاء الواجهة إنجليزية
+          Install-Language ar-SA -ErrorAction SilentlyContinue
+          Set-WinUserLanguageList -LanguageList en-US, ar-SA -Force
           
-          # بايثون مع مكتبات الهندسة العكسية والتخفي
+          # جعل ملفات Python مقروءة وقابلة للتنفيذ كملفات نظام
+          $pythonPath = (Get-Command python).Source
+          assoc .py=Python.File
+          ftype Python.File="`"$pythonPath`" `"%1`" %*"
+          $env:PATHEXT += ";.PY"
+          [Environment]::SetEnvironmentVariable("PATHEXT", "$(([Environment]::GetEnvironmentVariable("PATHEXT", "Machine"));.PY")", "Machine")
+          
+          # تحسين أداء الشبكة واستجابة السيرفر (Symphony Mode)
+          netsh int tcp set global autotuninglevel=normal
+          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+
+      # 3. تفعيل RDP وضبط النظام
+      - name: Configure RDP
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          Restart-Service -Name TermService -Force
+
+      # 4. إنشاء المستخدم (RDP) - الحفاظ على الاسم الأصلي
+      - name: Create RDP User
+        shell: powershell
+        run: |
+          $password = -join ((33..126) | Get-Random -Count 16 | % {[char]$_})
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          echo "RDP_USER=RDP" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$password" >> $env:GITHUB_ENV
+
+      # 5. تثبيت الأدوات مع "التمويه العبقري" (User-Agent Stealth)
+      - name: Install Tools & Stealth Setup
+        shell: powershell
+        run: |
+          choco install ffmpeg yt-dlp googlechrome aria2 -y
           python -m pip install --upgrade pip
-          pip install yt-dlp playwright cloudscraper fake-useragent requests undetected-chromedriver selenium-stealth auto-py-to-exe pycryptodome aiohttp
+          pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent requests undetected-chromedriver
           
-          # تثبيت Playwright مع دعم جميع المتصفحات لمحاكاة التنوع
-          python -m playwright install --with-deps
-
-      # 3. إعداد "المحرك الخارق" للتحميل (Advanced yt-dlp Layer)
-      - name: Configure Stealth Downloader Layer
-        shell: powershell
-        run: |
+          # إعداد هيدرز (Headers) ذكية لخداع يوتيوب والمنصات
           $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
           $configPath = "$env:USERPROFILE\yt-dlp.conf"
-          
-          # إعدادات معقدة: تشمل تجاوز القيود الجغرافية، محاكاة العميل، وتوزيع الأحمال
           @(" --user-agent `"$ua`"",
             " --referer `"https://www.google.com/`"",
             " --add-header `"Accept-Language: en-US,en;q=0.9,ar-SA;q=0.8`"",
             " --geo-bypass",
-            " --fragment-retries infinite",
-            " --external-downloader aria2c", # استخدام aria2 للتحميل متعدد المسارات لسرعة جنونية
-            " --external-downloader-args `"aria2c:-x 16 -s 16 -k 1M`"",
-            " --cookies-from-browser brave", # محاولة سحب الكوكيز تلقائياً من بريف
-            " --no-check-certificates"
+            " --external-downloader aria2c",
+            " --external-downloader-args `"aria2c:-x 16 -s 16 -k 1M`""
           ) | Out-File -FilePath $configPath -Encoding utf8
 
-      # 4. إعداد الـ RDP مع دعم العربية واللغات
-      - name: RDP & Localization Deep Setup
-        shell: powershell
-        run: |
-          Install-Language ar-SA -ErrorAction SilentlyContinue
-          Set-WinUserLanguageList -LanguageList en-US, ar-SA -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          
-          $password = "GitHub@Expert#2025"
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name "Cyber_Admin" -Password $securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "Cyber_Admin"
-          echo "RDP_PASS=$password" >> $env:GITHUB_ENV
-
-      # 5. اتصال شبكة Tailscale المشفرة
-      - name: Tailscale Mesh Connection
+      # 6. ربط Tailscale
+      - name: Tailscale Connect
         shell: powershell
         run: |
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $out = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process msiexec.exe -ArgumentList "/i $out /quiet /norestart" -Wait
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=Cyber-Runner-X
+          
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner --accept-routes
+          
           $tsIp = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TS_IP=$tsIp" >> $env:GITHUB_ENV
 
-      # 6. لوحة التحكم المهندس (Engineer Dashboard)
-      - name: Connection Dashboard
+      # 7. لوحة البيانات النهائية (Connection Dashboard)
+      - name: Connection Info
         shell: powershell
         run: |
-          Write-Host "`n" + ("#"*60) -ForegroundColor Cyan
-          Write-Host "🛸 DEEP-STEALTH CYBER WORKSTATION ACTIVE" -ForegroundColor Magenta
-          Write-Host ("#"*60)
-          Write-Host "🌐 Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
-          Write-Host "👤 Admin User   : Cyber_Admin"
-          Write-Host "🔑 Credentials  : $env:RDP_PASS" -ForegroundColor Red
-          Write-Host "🚀 Acceleration : Aria2 + High Performance Mode" -ForegroundColor Green
-          Write-Host "🎭 Masking      : Hardware Spoofing Active" -ForegroundColor Blue
-          Write-Host ("#"*60)
+          Write-Host "`n===============================================" -ForegroundColor Green
+          Write-Host "🚀 RDP SYSTEM READY (Stealth & Arabic Active)" -ForegroundColor Cyan
+          Write-Host "==============================================="
+          Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
+          Write-Host "Username     : $env:RDP_USER"
+          Write-Host "Password     : $env:RDP_PASS" -ForegroundColor Red
+          Write-Host "Python .py   : Executable Enabled" -ForegroundColor Blue
+          Write-Host "==============================================="
 
-      # 7. الحفاظ على استقرار النظام (Stability Engine)
-      - name: System Stability Engine
+      # 8. الحفاظ على الاتصال مع تنظيف الذاكرة التلقائي
+      - name: Keep Alive
         shell: powershell
         run: |
           while ($true) {
-            # تفريغ الذاكرة والتعامل مع العمليات المعلقة
-            [System.GC]::Collect()
-            Get-Process | Where-Object { $_.WorkingSet -gt 500MB -and $_.ProcessName -notlike "*explorer*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-            Write-Host "[$(Get-Date)] System optimized. Monitoring connections..." -ForegroundColor Gray
+            Write-Host "[$(Get-Date)] RDP Server is active. Optimizing RAM..."
+            [System.GC]::Collect() # تفريغ الذاكرة لضمان استمرار "السيمفونية" التقنية
             Start-Sleep -Seconds 300
           }
