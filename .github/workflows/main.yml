@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 2. هندسة النظام: دعم العربية + ربط ملفات Python لتعمل مباشرة
+      # 2. هندسة النظام: دعم العربية + ربط ملفات Python (تصحيح الخطأ السابق)
       - name: System Configuration
         shell: powershell
         run: |
@@ -26,16 +26,21 @@ jobs:
           Install-Language ar-SA -ErrorAction SilentlyContinue
           Set-WinUserLanguageList -LanguageList en-US, ar-SA -Force
           
-          # جعل ملفات Python مقروءة وقابلة للتنفيذ كملفات نظام
+          # جعل ملفات Python مقروؤة وقابلة للتنفيذ
           $pythonPath = (Get-Command python).Source
           assoc .py=Python.File
           ftype Python.File="`"$pythonPath`" `"%1`" %*"
-          $env:PATHEXT += ";.PY"
-          [Environment]::SetEnvironmentVariable("PATHEXT", "$(([Environment]::GetEnvironmentVariable("PATHEXT", "Machine"));.PY")", "Machine")
           
-          # تحسين أداء الشبكة واستجابة السيرفر (Symphony Mode)
+          # تصحيح إضافة الامتداد للنظام (حل مشكلة علامات التنصيص)
+          $currentPathExt = [Environment]::GetEnvironmentVariable("PATHEXT", "Machine")
+          if ($currentPathExt -notlike "*;.PY*") {
+              [Environment]::SetEnvironmentVariable("PATHEXT", "$currentPathExt;.PY", "Machine")
+          }
+          
+          # تحسين أداء الشبكة واستجابة السيرفر
           netsh int tcp set global autotuninglevel=normal
           powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+          Write-Host "System Configuration completed successfully." -ForegroundColor Green
 
       # 3. تفعيل RDP وضبط النظام
       - name: Configure RDP
@@ -46,7 +51,7 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
           Restart-Service -Name TermService -Force
 
-      # 4. إنشاء المستخدم (RDP) - الحفاظ على الاسم الأصلي
+      # 4. إنشاء المستخدم (RDP)
       - name: Create RDP User
         shell: powershell
         run: |
@@ -58,7 +63,7 @@ jobs:
           echo "RDP_USER=RDP" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      # 5. تثبيت الأدوات مع "التمويه العبقري" (User-Agent Stealth)
+      # 5. تثبيت الأدوات مع التمويه الذكي
       - name: Install Tools & Stealth Setup
         shell: powershell
         run: |
@@ -66,7 +71,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent requests undetected-chromedriver
           
-          # إعداد هيدرز (Headers) ذكية لخداع يوتيوب والمنصات
+          # إعداد التمويه لخداع يوتيوب
           $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
           $configPath = "$env:USERPROFILE\yt-dlp.conf"
           @(" --user-agent `"$ua`"",
@@ -85,31 +90,28 @@ jobs:
           $out = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $url -OutFile $out
           Start-Process msiexec.exe -ArgumentList "/i $out /quiet /norestart" -Wait
-          
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner --accept-routes
-          
           $tsIp = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TS_IP=$tsIp" >> $env:GITHUB_ENV
 
-      # 7. لوحة البيانات النهائية (Connection Dashboard)
+      # 7. لوحة البيانات النهائية
       - name: Connection Info
         shell: powershell
         run: |
           Write-Host "`n===============================================" -ForegroundColor Green
-          Write-Host "🚀 RDP SYSTEM READY (Stealth & Arabic Active)" -ForegroundColor Cyan
+          Write-Host "🚀 RDP SYSTEM READY (Fixed & Optimized)" -ForegroundColor Cyan
           Write-Host "==============================================="
           Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
           Write-Host "Username     : $env:RDP_USER"
           Write-Host "Password     : $env:RDP_PASS" -ForegroundColor Red
-          Write-Host "Python .py   : Executable Enabled" -ForegroundColor Blue
           Write-Host "==============================================="
 
-      # 8. الحفاظ على الاتصال مع تنظيف الذاكرة التلقائي
+      # 8. الحفاظ على الاتصال
       - name: Keep Alive
         shell: powershell
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP Server is active. Optimizing RAM..."
-            [System.GC]::Collect() # تفريغ الذاكرة لضمان استمرار "السيمفونية" التقنية
+            Write-Host "[$(Get-Date)] RDP Server is active..."
+            [System.GC]::Collect()
             Start-Sleep -Seconds 300
           }
