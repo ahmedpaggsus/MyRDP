@@ -6,7 +6,7 @@ on:
 jobs:
   rdp-job:
     runs-on: windows-latest
-    timeout-minutes: 360 # 6 ساعات
+    timeout-minutes: 360
 
     steps:
       - name: Checkout Code
@@ -18,29 +18,28 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 2. هندسة النظام: دعم العربية + ربط ملفات Python (تصحيح الخطأ السابق)
-      - name: System Configuration
+      # 2. هندسة النظام: دعم العربية "السريع" + ربط ملفات Python
+      - name: Quick System Configuration
         shell: powershell
         run: |
-          # تثبيت دعم اللغة العربية كاملاً مع بقاء الواجهة إنجليزية
-          Install-Language ar-SA -ErrorAction SilentlyContinue
+          # تفعيل دعم الحروف العربية والخطوط برمجياً (سريع جداً)
+          Set-WinSystemLocale ar-SA
           Set-WinUserLanguageList -LanguageList en-US, ar-SA -Force
           
-          # جعل ملفات Python مقروؤة وقابلة للتنفيذ
+          # جعل ملفات Python قابلة للتنفيذ
           $pythonPath = (Get-Command python).Source
           assoc .py=Python.File
           ftype Python.File="`"$pythonPath`" `"%1`" %*"
           
-          # تصحيح إضافة الامتداد للنظام (حل مشكلة علامات التنصيص)
+          # إضافة الامتداد للنظام بشكل آمن
           $currentPathExt = [Environment]::GetEnvironmentVariable("PATHEXT", "Machine")
           if ($currentPathExt -notlike "*;.PY*") {
               [Environment]::SetEnvironmentVariable("PATHEXT", "$currentPathExt;.PY", "Machine")
           }
           
-          # تحسين أداء الشبكة واستجابة السيرفر
+          # تحسين أداء الشبكة
           netsh int tcp set global autotuninglevel=normal
-          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
-          Write-Host "System Configuration completed successfully." -ForegroundColor Green
+          Write-Host "Quick Arabic support & Python association enabled." -ForegroundColor Green
 
       # 3. تفعيل RDP وضبط النظام
       - name: Configure RDP
@@ -63,15 +62,15 @@ jobs:
           echo "RDP_USER=RDP" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      # 5. تثبيت الأدوات مع التمويه الذكي
+      # 5. تثبيت الأدوات مع التمويه الذكي (User-Agent Stealth)
       - name: Install Tools & Stealth Setup
         shell: powershell
         run: |
           choco install ffmpeg yt-dlp googlechrome aria2 -y
           python -m pip install --upgrade pip
-          pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent requests undetected-chromedriver
+          pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent requests
           
-          # إعداد التمويه لخداع يوتيوب
+          # إعداد التمويه (Stealth)
           $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
           $configPath = "$env:USERPROFILE\yt-dlp.conf"
           @(" --user-agent `"$ua`"",
@@ -99,7 +98,7 @@ jobs:
         shell: powershell
         run: |
           Write-Host "`n===============================================" -ForegroundColor Green
-          Write-Host "🚀 RDP SYSTEM READY (Fixed & Optimized)" -ForegroundColor Cyan
+          Write-Host "🚀 RDP SYSTEM READY (Fast Boot Mode)" -ForegroundColor Cyan
           Write-Host "==============================================="
           Write-Host "Tailscale IP : $env:TS_IP" -ForegroundColor Yellow
           Write-Host "Username     : $env:RDP_USER"
