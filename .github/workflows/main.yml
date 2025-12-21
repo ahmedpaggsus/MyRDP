@@ -51,15 +51,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent ffmpeg-python
 
-      # --- الخطوة الجديدة لإضافة Python Installer Manager ---
-      - name: Install Python Installer Manager
+      # --- تثبيت Python Manager عبر الرابط المباشر (MSIX) ---
+      - name: Install Python Manager
         shell: powershell
         run: |
-          Write-Host "Installing Python Installer Manager..." -ForegroundColor Cyan
-          pip install python-installer-manager
-          # التحقق من التثبيت
-          pim --version
-      # -------------------------------------------------------
+          $msixUrl = "https://www.python.org/ftp/python/pymanager/python-manager-25.2.msix"
+          $msixPath = "$env:TEMP\python-manager.msix"
+          Write-Host "Downloading Python Manager from python.org..." -ForegroundColor Cyan
+          Invoke-WebRequest -Uri $msixUrl -OutFile $msixPath
+          Write-Host "Installing MSIX package..." -ForegroundColor Cyan
+          Add-AppxPackage -Path $msixPath
+          Write-Host "Python Manager installed successfully!" -ForegroundColor Green
 
       - name: Tailscale Connect
         shell: powershell
