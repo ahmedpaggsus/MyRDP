@@ -25,7 +25,6 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
           Restart-Service -Name TermService -Force
 
-      # تشغيل ملفات Python كبرامج (إصلاح الـ Shell إلى CMD)
       - name: Make Python Files Executable
         shell: cmd
         run: |
@@ -51,6 +50,16 @@ jobs:
           choco install ffmpeg yt-dlp vlc -y
           python -m pip install --upgrade pip
           pip install yt-dlp aiohttp cloudscraper tqdm fake-useragent ffmpeg-python
+
+      # --- الخطوة الجديدة لإضافة Python Installer Manager ---
+      - name: Install Python Installer Manager
+        shell: powershell
+        run: |
+          Write-Host "Installing Python Installer Manager..." -ForegroundColor Cyan
+          pip install python-installer-manager
+          # التحقق من التثبيت
+          pim --version
+      # -------------------------------------------------------
 
       - name: Tailscale Connect
         shell: powershell
